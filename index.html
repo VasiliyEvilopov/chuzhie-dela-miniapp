@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Чужие дела</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --fb-bg:#f2f2f7; --fb-card:#ffffff; --fb-text:#111; --fb-hint:#8e8e93; --fb-accent:#2481cc; --fb-accent-text:#fff; --fb-danger:#e53935; --fb-sep:rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --fb-bg:#0f0f10; --fb-card:#1c1c1e; --fb-text:#f2f2f2; --fb-hint:#8d8d93; --fb-accent:#5aa9f0; --fb-accent-text:#fff; --fb-danger:#ff5c5c; --fb-sep:rgba(255,255,255,.08); }
+  }
+  :root{
+    --bg:var(--tg-theme-secondary-bg-color,var(--fb-bg));
+    --card:var(--tg-theme-section-bg-color,var(--tg-theme-bg-color,var(--fb-card)));
+    --text:var(--tg-theme-text-color,var(--fb-text));
+    --hint:var(--tg-theme-hint-color,var(--fb-hint));
+    --accent:var(--tg-theme-button-color,var(--fb-accent));
+    --accent-text:var(--tg-theme-button-text-color,var(--fb-accent-text));
+    --danger:var(--tg-theme-destructive-text-color,var(--fb-danger));
+    --sep:var(--fb-sep);
+    --warn:#f29d00; --ok:#34a853;
+    --r:14px;
+    --lift:64px; /* место под плашку хостинга внизу */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+  #app{max-width:640px;margin:0 auto;padding:12px 16px calc(96px + var(--lift) + env(safe-area-inset-bottom))}
+
+  .head{display:flex;align-items:center;gap:10px;margin:4px 0 14px}
+  .head .titles{flex:1;min-width:0}
+  .head h1{font-size:24px;margin:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .head .sub{color:var(--hint);font-size:14px;margin-top:2px}
+  .iconbtn{width:38px;height:38px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:18px;flex:none}
+
+  .section-title{color:var(--hint);font-size:13px;text-transform:uppercase;letter-spacing:.04em;margin:20px 4px 8px}
+  .list{background:var(--card);border-radius:var(--r);overflow:hidden}
+  .row{display:flex;align-items:center;gap:12px;padding:12px 14px;position:relative;width:100%;text-align:left}
+  .row + .row::before{content:"";position:absolute;top:0;left:62px;right:0;border-top:1px solid var(--sep)}
+  .list.plain .row + .row::before{left:14px}
+  .row .main{flex:1;min-width:0}
+  .row .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .meta{color:var(--hint);font-size:13px;margin-top:2px}
+  .row .chev{color:var(--hint);font-size:20px}
+  .avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none}
+  .gicon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);font-size:17px}
+  .badge{font-size:12px;font-weight:600;padding:2px 8px;border-radius:20px;background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger);flex:none}
+
+  .task{display:flex;gap:12px;padding:12px 14px;position:relative;align-items:flex-start;cursor:pointer}
+  .task + .task::before{content:"";position:absolute;top:0;left:50px;right:0;border-top:1px solid var(--sep)}
+  .check{width:24px;height:24px;border-radius:50%;border:2px solid var(--hint);flex:none;margin-top:1px;display:grid;place-items:center;color:transparent;font-size:14px;font-weight:700}
+  .task.done .check{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+  .task.done .ttitle{text-decoration:line-through;color:var(--hint)}
+  .tbody{flex:1;min-width:0}
+  .ttitle{font-weight:500;word-wrap:break-word}
+  .tpath{font-size:13px;color:var(--accent);margin-top:2px}
+  .tmeta{font-size:13px;color:var(--hint);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 10px}
+  .tnote{font-size:13px;color:var(--hint);margin-top:4px;white-space:pre-wrap}
+  .dl.over{color:var(--danger);font-weight:600}
+  .dl.today{color:var(--warn);font-weight:600}
+  .dl.soon{color:var(--warn)}
+  .tag{font-size:11px;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:6px;background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+
+  .empty{text-align:center;color:var(--hint);padding:36px 20px;background:var(--card);border-radius:var(--r)}
+  .empty .big{font-size:40px;margin-bottom:8px}
+  .empty b{color:var(--text)}
+
+  /* calendar */
+  .cal{background:var(--card);border-radius:var(--r);padding:12px}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cal-head .m{font-weight:700;font-size:17px}
+  .cal-head button{width:36px;height:36px;border-radius:50%;font-size:20px;color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .wd{text-align:center;font-size:12px;color:var(--hint);padding:4px 0}
+  .day{aspect-ratio:1/1;max-height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:15px;position:relative}
+  .day.out{visibility:hidden}
+  .day.today{color:var(--accent);font-weight:700}
+  .day.sel{background:var(--accent);color:var(--accent-text);font-weight:700}
+  .day.we:not(.sel):not(.today){color:color-mix(in srgb,var(--text) 65%,transparent)}
+  .dots{display:flex;gap:3px;height:5px}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .dot.dl{background:var(--danger)}
+  .dot.done{background:var(--hint)}
+  .day.sel .dot{background:var(--accent-text)}
+  .legend{display:flex;gap:14px;justify-content:center;font-size:12px;color:var(--hint);margin-top:8px}
+  .legend span{display:flex;align-items:center;gap:5px}
+
+  /* tabs + fab */
+  .tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--sep);display:flex;justify-content:center;padding-bottom:calc(var(--lift) + env(safe-area-inset-bottom));z-index:5}
+  .tabs button{flex:1;max-width:220px;padding:8px 0 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:var(--hint)}
+  .tabs button .i{font-size:22px;line-height:1}
+  .tabs button.on{color:var(--accent);font-weight:600}
+  .fab{position:fixed;right:max(16px,calc(50% - 304px));bottom:calc(72px + var(--lift) + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-text);font-size:30px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.22);z-index:6}
+
+  /* sheet */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
+  .overlay.on{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;max-width:640px;margin:0 auto;background:var(--card);border-radius:18px 18px 0 0;padding:10px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .25s ease;z-index:11;max-height:92vh;overflow:auto}
+  .sheet.on{transform:none}
+  .grab{width:38px;height:5px;border-radius:3px;background:var(--sep);margin:0 auto 10px}
+  .sheet h2{font-size:19px;margin:0 0 14px}
+  .field{display:block;margin-bottom:12px}
+  .field > span{display:block;font-size:13px;color:var(--hint);margin:0 0 5px 2px}
+  .field input,.field select,.field textarea{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--sep);border-radius:12px;padding:11px 12px;outline:none;-webkit-appearance:none;appearance:none;min-height:46px}
+  .field textarea{min-height:70px;resize:vertical}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btn{display:block;width:100%;padding:14px;border-radius:12px;font-weight:600;text-align:center;margin-top:6px}
+  .btn.primary{background:var(--accent);color:var(--accent-text)}
+  .btn.danger{color:var(--danger)}
+  .btn.danger.armed{background:var(--danger);color:#fff}
+  .btn.secondary{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+  .sec-row{display:flex;justify-content:space-between;align-items:center;width:calc(100% - 8px)}
+  .archive-toggle{text-align:left}
+  .linkbtn{color:var(--accent);text-transform:none;letter-spacing:0;font-size:14px;font-weight:500}
+  .list.archived .task{opacity:.6}
+  .chip{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--hint);padding:6px 2px;margin-bottom:12px;text-align:left;line-height:1.2}
+  .chip .box{width:20px;height:20px;border-radius:6px;border:2px solid var(--hint);display:grid;place-items:center;font-size:12px;font-weight:700;color:transparent;flex:none}
+  .chip.on{color:var(--accent)}
+  .chip.on .box{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+  .field input:disabled{opacity:.55}
+  .hidden{display:none!important}
+  .err{color:var(--danger);font-size:13px;margin:-4px 0 10px 2px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<button class="fab" id="fab" aria-label="Добавить">+</button>
+<nav class="tabs">
+  <button data-tab="people"><span class="i">👥</span>Люди</button>
+  <button data-tab="calendar"><span class="i">📅</span>Календарь</button>
+</nav>
+<div class="overlay" id="overlay"></div>
+<form class="sheet" id="sheet" autocomplete="off"></form>
+
+<script>
+/* ===================== Telegram ===================== */
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+const ver = v => inTg && tg.isVersionAtLeast && tg.isVersionAtLeast(v);
+if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
+if (ver('6.1')) { try { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch(e){} }
+const haptic = (t='light') => { try { inTg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch(e){} };
+const useTgBack = ver('6.1') && tg.BackButton;
+
+/* ===================== Storage ===================== */
+const LS_KEY = 'foreign-tasks-v1';
+const CHUNK = 4000; // CloudStorage: max 4096 chars per value
+const Store = {
+  cloud: ver('6.9') && !!tg.CloudStorage,
+  prevChunks: 0,
+  cs(method, ...args){
+    return new Promise((res, rej) => tg.CloudStorage[method](...args, (err, val) => err ? rej(err) : res(val)));
+  },
+  async load(){
+    if (this.cloud){
+      try{
+        const meta = await this.cs('getItem', 'meta');
+        if (meta){
+          const n = +meta, keys = Array.from({length:n}, (_,i) => 'd'+i);
+          const vals = await this.cs('getItems', keys);
+          this.prevChunks = n;
+          return JSON.parse(keys.map(k => vals[k] || '').join(''));
+        }
+      }catch(e){ console.warn('cloud load', e); }
+    }
+    try{ const s = localStorage.getItem(LS_KEY); if (s) return JSON.parse(s); }catch(e){}
+    return null;
+  },
+  async save(d){
+    const s = JSON.stringify(d);
+    try{ localStorage.setItem(LS_KEY, s); }catch(e){}
+    if (!this.cloud) return;
+    const chunks = [];
+    for (let i = 0; i < s.length; i += CHUNK) chunks.push(s.slice(i, i + CHUNK));
+    for (let i = 0; i < chunks.length; i++) await this.cs('setItem', 'd'+i, chunks[i]);
+    await this.cs('setItem', 'meta', String(chunks.length));
+    if (this.prevChunks > chunks.length){
+      const extra = []; for (let i = chunks.length; i < this.prevChunks; i++) extra.push('d'+i);
+      await this.cs('removeItems', extra);
+    }
+    this.prevChunks = chunks.length;
+  }
+};
+let saveTimer, saveChain = Promise.resolve();
+function flushSave(){ clearTimeout(saveTimer); saveChain = saveChain.then(() => Store.save(data)).catch(e => console.warn('save', e)); }
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 400); }
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+
+/* ===================== Helpers ===================== */
+const $ = s => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const todayISO = () => iso(new Date());
+const parseD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const fmt = (s, o={day:'numeric', month:'short'}) => s ? parseD(s).toLocaleDateString('ru-RU', o) : '';
+const daysTo = s => Math.round((parseD(s) - parseD(todayISO())) / 864e5);
+const plural = (n, a, b, c) => { const m10 = n%10, m100 = n%100; return n + ' ' + (m10===1 && m100!==11 ? a : m10>=2 && m10<=4 && (m100<10||m100>=20) ? b : c); };
+const COLORS = ['#e57373','#f06292','#ba68c8','#7986cb','#4fc3f7','#4db6ac','#81c784','#ffb74d','#a1887f','#90a4ae'];
+const colorFor = id => COLORS[[...id].reduce((a,c) => a + c.charCodeAt(0), 0) % COLORS.length];
+function ask(msg){
+  return new Promise(res => {
+    if (ver('6.2')) tg.showConfirm(msg, ok => res(!!ok));
+    else res(window.confirm(msg));
+  });
+}
+
+/* ===================== Data & state ===================== */
+let data = { people: [] };
+const state = { tab: 'people', personId: null, groupId: null, calMonth: null, selDay: todayISO() };
+{ const t = new Date(); state.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); }
+
+const person = id => data.people.find(p => p.id === id);
+const group = (p, id) => p && p.groups.find(g => g.id === id);
+function allTasks(withArchived = false){
+  const out = [];
+  for (const p of data.people) for (const g of p.groups) for (const t of g.tasks)
+    if (withArchived || !t.archived) out.push({t, p, g});
+  return out;
+}
+const findTask = id => allTasks(true).find(x => x.t.id === id);
+const liveTasks = g => g.tasks.filter(t => !t.archived);
+function commit(){ render(); scheduleSave(); }
+
+function sortTasks(list){
+  const key = x => x.t.deadline || x.t.date || '9999';
+  return list.slice().sort((a, b) => (a.t.done - b.t.done) || key(a).localeCompare(key(b)) || (a.t.created||0) - (b.t.created||0));
+}
+
+/* ===================== Render pieces ===================== */
+function dlLabel(t){
+  if (!t.deadline) return '';
+  const n = daysTo(t.deadline);
+  let cls = '', extra = '';
+  if (!t.done){
+    if (n < 0){ cls = 'over'; extra = ` · просрочено на ${plural(-n,'день','дня','дней')}`; }
+    else if (n === 0){ cls = 'today'; extra = ' · сегодня'; }
+    else if (n === 1){ cls = 'soon'; extra = ' · завтра'; }
+    else if (n <= 7){ cls = 'soon'; extra = ` · через ${plural(n,'день','дня','дней')}`; }
+  }
+  return `<span class="dl ${cls}">⏰ до ${fmt(t.deadline)}${extra}</span>`;
+}
+
+function taskItem({t, p, g}, showPath, tagDeadline){
+  return `<div class="task ${t.done ? 'done' : ''}" data-act="edit-task" data-id="${t.id}">
+    <button type="button" class="check" data-act="toggle-task" data-id="${t.id}" aria-label="Готово">✓</button>
+    <div class="tbody">
+      <div class="ttitle">${tagDeadline ? '<span class="tag">срок</span> ' : ''}${esc(t.title)}</div>
+      ${showPath ? `<div class="tpath">${esc(p.name)} › ${esc(g.name)}</div>` : ''}
+      <div class="tmeta">${t.date ? `<span>📅 ${fmt(t.date, {day:'numeric', month:'long'})}</span>` : ''}${dlLabel(t)}</div>
+      ${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function header(title, sub, menuAct){
+  const back = (!useTgBack && state.tab === 'people' && state.personId) ? `<button type="button" class="iconbtn" data-act="back" aria-label="Назад">‹</button>` : '';
+  const menu = menuAct ? `<button type="button" class="iconbtn" data-act="${menuAct}" aria-label="Изменить">⋯</button>` : '';
+  return `<div class="head">${back}<div class="titles"><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ''}</div>${menu}</div>`;
+}
+
+function renderPeople(){
+  let h = header('Чужие дела', data.people.length ? plural(data.people.length, 'человек', 'человека', 'человек') : '');
+  if (!data.people.length){
+    return h + `<div class="empty"><div class="big">👥</div>Добавьте человека, чьи дела вы ведёте — например, <b>Руководитель</b> или <b>Иван Иванов</b>.<br>Внутри можно создать подсписки: «Встречи», «Звонки», «Поручения»…<br><br>Нажмите <b>+</b> внизу.</div>`;
+  }
+  h += '<div class="list">';
+  for (const p of data.people){
+    const tasks = p.groups.flatMap(liveTasks);
+    const active = tasks.filter(t => !t.done).length;
+    const over = tasks.filter(t => !t.done && t.deadline && daysTo(t.deadline) < 0).length;
+    h += `<button type="button" class="row" data-act="open-person" data-id="${p.id}">
+      <div class="avatar" style="background:${colorFor(p.id)}">${esc(p.name.trim()[0] || '?').toUpperCase()}</div>
+      <div class="main"><div class="name">${esc(p.name)}</div><div class="meta">${plural(p.groups.length,'подсписок','подсписка','подсписков')} · ${plural(active,'активное дело','активных дела','активных дел')}</div></div>
+      ${over ? `<span class="badge">${over} просроч.</span>` : ''}<span class="chev">›</span></button>`;
+  }
+  return h + '</div>';
+}
+
+function renderPerson(p){
+  let h = header(p.name, plural(p.groups.length,'подсписок','подсписка','подсписков'), 'person-menu');
+  if (!p.groups.length){
+    return h + `<div class="empty"><div class="big">🗂️</div>Пока нет подсписков.<br>Создайте, например, <b>«Встречи»</b> или <b>«Звонки»</b> — кнопкой <b>+</b>.</div>`;
+  }
+  h += '<div class="list">';
+  for (const g of p.groups){
+    const active = liveTasks(g).filter(t => !t.done);
+    const archN = g.tasks.length - liveTasks(g).length;
+    const over = active.filter(t => t.deadline && daysTo(t.deadline) < 0).length;
+    const next = active.filter(t => t.deadline).sort((a,b) => a.deadline.localeCompare(b.deadline))[0];
+    h += `<button type="button" class="row" data-act="open-group" data-id="${g.id}">
+      <div class="gicon">📋</div>
+      <div class="main"><div class="name">${esc(g.name)}</div><div class="meta">${plural(active.length,'дело','дела','дел')}${next ? ` · ближайший срок ${fmt(next.deadline)}` : ''}${archN ? ` · 📦 ${archN}` : ''}</div></div>
+      ${over ? `<span class="badge">${over} просроч.</span>` : ''}<span class="chev">›</span></button>`;
+  }
+  return h + '</div>';
+}
+
+function renderGroup(p, g){
+  let h = header(g.name, esc(p.name), 'group-menu');
+  const items = sortTasks(liveTasks(g).map(t => ({t, p, g})));
+  const arch = g.tasks.filter(t => t.archived).sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0)).map(t => ({t, p, g}));
+  if (!items.length) h += `<div class="empty"><div class="big">📝</div>${arch.length ? 'Активных дел нет.' : 'Дел пока нет.'}<br>Нажмите <b>+</b>, чтобы записать дело с датой и дедлайном.</div>`;
+  const active = items.filter(x => !x.t.done), done = items.filter(x => x.t.done);
+  if (active.length) h += `<div class="list">${active.map(x => taskItem(x, false)).join('')}</div>`;
+  if (done.length) h += `<div class="section-title sec-row"><span>Выполнено · ${done.length}</span><button type="button" class="linkbtn" data-act="archive-done">Всё в архив</button></div><div class="list">${done.map(x => taskItem(x, false)).join('')}</div>`;
+  if (arch.length){
+    h += `<button type="button" class="section-title sec-row archive-toggle" data-act="toggle-archive"><span>📦 Архив · ${arch.length}</span><span class="linkbtn">${state.showArchive ? 'Скрыть' : 'Показать'}</span></button>`;
+    if (state.showArchive) h += `<div class="list archived">${arch.map(x => taskItem(x, false)).join('')}</div>`;
+  }
+  return h;
+}
+
+function renderCalendar(){
+  const m = state.calMonth, y = m.getFullYear(), mo = m.getMonth();
+  const offset = (new Date(y, mo, 1).getDay() + 6) % 7;
+  const dim = new Date(y, mo + 1, 0).getDate();
+  const tasks = allTasks();
+  const byDay = {};
+  for (const x of tasks){
+    if (x.t.date) (byDay[x.t.date] ||= {d:0, l:0, done:0}).d++;
+    if (x.t.deadline){ const e = (byDay[x.t.deadline] ||= {d:0, l:0, done:0}); x.t.done ? e.done++ : e.l++; }
+  }
+  let label = m.toLocaleDateString('ru-RU', {month:'long', year:'numeric'}).replace(/\s*г\.?$/, '');
+  label = label[0].toUpperCase() + label.slice(1);
+  const today = todayISO();
+  let h = header('Календарь', 'Даты дел и дедлайны всех людей');
+  h += `<div class="cal"><div class="cal-head"><button type="button" data-act="cal-prev" aria-label="Предыдущий месяц">‹</button><div class="m">${label}</div><button type="button" data-act="cal-next" aria-label="Следующий месяц">›</button></div><div class="grid">`;
+  h += ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(w => `<div class="wd">${w}</div>`).join('');
+  for (let i = 0; i < offset; i++) h += '<div class="day out"></div>';
+  for (let d = 1; d <= dim; d++){
+    const key = `${y}-${pad(mo+1)}-${pad(d)}`, e = byDay[key], wd = (offset + d - 1) % 7;
+    const dots = e ? `${e.d ? '<i class="dot"></i>' : ''}${e.l ? '<i class="dot dl"></i>' : ''}${!e.l && e.done ? '<i class="dot done"></i>' : ''}` : '';
+    h += `<button type="button" class="day ${key === today ? 'today' : ''} ${key === state.selDay ? 'sel' : ''} ${wd >= 5 ? 'we' : ''}" data-act="cal-day" data-id="${key}">${d}<span class="dots">${dots}</span></button>`;
+  }
+  h += `</div><div class="legend"><span><i class="dot"></i>дело</span><span><i class="dot dl"></i>дедлайн</span></div></div>`;
+
+  const sel = state.selDay;
+  const dayItems = sortTasks(tasks.filter(x => x.t.date === sel || x.t.deadline === sel));
+  h += `<div class="section-title">${fmt(sel, {weekday:'long', day:'numeric', month:'long'})}</div>`;
+  h += dayItems.length
+    ? `<div class="list">${dayItems.map(x => taskItem(x, true, x.t.deadline === sel && x.t.date !== sel)).join('')}</div>`
+    : `<div class="empty" style="padding:20px">На этот день ничего нет</div>`;
+
+  const upcoming = tasks.filter(x => !x.t.done && x.t.deadline && daysTo(x.t.deadline) <= 14)
+    .sort((a,b) => a.t.deadline.localeCompare(b.t.deadline)).slice(0, 15);
+  if (upcoming.length) h += `<div class="section-title">Горящие дедлайны (2 недели)</div><div class="list">${upcoming.map(x => taskItem(x, true)).join('')}</div>`;
+  return h;
+}
+
+/* ===================== Main render ===================== */
+function render(){
+  let p = state.personId && person(state.personId);
+  if (state.personId && !p){ state.personId = state.groupId = null; p = null; }
+  let g = p && state.groupId && group(p, state.groupId);
+  if (state.groupId && !g) state.groupId = null;
+
+  let html;
+  if (state.tab === 'calendar') html = renderCalendar();
+  else if (g) html = renderGroup(p, g);
+  else if (p) html = renderPerson(p);
+  else html = renderPeople();
+  $('#app').innerHTML = html;
+
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
+  if (useTgBack){
+    (state.tab === 'people' && state.personId) ? tg.BackButton.show() : tg.BackButton.hide();
+  }
+}
+
+function goBack(){
+  if (state.groupId) state.groupId = null;
+  else if (state.personId) state.personId = null;
+  render(); window.scrollTo(0, 0);
+}
+if (useTgBack) tg.BackButton.onClick(goBack);
+
+/* ===================== Sheet (forms) ===================== */
+const sheet = $('#sheet'), overlay = $('#overlay');
+function openSheet({title, body, submitText = 'Сохранить', onSubmit, onDelete, deleteText = 'Удалить', onMount, extra}){
+  sheet.innerHTML = `<div class="grab"></div><h2>${esc(title)}</h2>${body}<div class="err hidden" id="sheetErr"></div>
+    <button type="button" class="btn primary" id="sheetSave">${esc(submitText)}</button>
+    ${extra ? `<button type="button" class="btn secondary" id="sheetExtra">${esc(extra.text)}</button>` : ''}
+    ${onDelete ? `<button type="button" class="btn danger" id="sheetDel">${esc(deleteText)}</button>` : ''}`;
+  const doSave = () => {
+    const er = $('#sheetErr');
+    try{
+      const fd = {};
+      sheet.querySelectorAll('[name]').forEach(el => { fd[el.name] = el.value; });
+      const res = onSubmit(fd);
+      if (typeof res === 'string'){ er.textContent = res; er.classList.remove('hidden'); haptic('rigid'); return; }
+    }catch(err){ console.error(err); er.textContent = 'Ошибка: ' + err.message; er.classList.remove('hidden'); return; }
+    haptic(); closeSheet(); commit();
+  };
+  $('#sheetSave').onclick = doSave;
+  sheet.onsubmit = e => { e.preventDefault(); doSave(); };
+  if (onDelete){
+    const del = $('#sheetDel');
+    let armed = false, timer;
+    del.onclick = () => {
+      if (!armed){
+        armed = true; haptic('rigid');
+        del.textContent = 'Точно удалить? Нажмите ещё раз';
+        del.classList.add('armed');
+        timer = setTimeout(() => { armed = false; del.textContent = deleteText; del.classList.remove('armed'); }, 4000);
+        return;
+      }
+      clearTimeout(timer);
+      try{ onDelete(); }catch(err){ console.error(err); const er = $('#sheetErr'); er.textContent = 'Ошибка: ' + err.message; er.classList.remove('hidden'); return; }
+      haptic('heavy'); closeSheet(); commit();
+    };
+  }
+  if (extra) $('#sheetExtra').onclick = () => { extra.onClick(); haptic('medium'); closeSheet(); commit(); };
+  onMount && onMount();
+  overlay.classList.add('on'); sheet.classList.add('on');
+}
+function closeSheet(){ overlay.classList.remove('on'); sheet.classList.remove('on'); document.activeElement && document.activeElement.blur(); }
+overlay.onclick = closeSheet;
+
+function nameSheet({title, label, placeholder, value = '', onSave, onDelete}){
+  openSheet({
+    title,
+    body: `<label class="field"><span>${esc(label)}</span><input name="name" maxlength="80" placeholder="${esc(placeholder)}" value="${esc(value)}"></label>`,
+    onSubmit: fd => { const n = fd.name.trim(); if (!n) return 'Введите название'; onSave(n); },
+    onDelete
+  });
+}
+
+function addPerson(){
+  nameSheet({ title: 'Новый человек', label: 'Имя', placeholder: 'Например, Иван Иванов',
+    onSave: name => data.people.push({ id: uid(), name, groups: [] }) });
+}
+function editPerson(p){
+  nameSheet({ title: 'Человек', label: 'Имя', placeholder: 'Имя', value: p.name,
+    onSave: name => { p.name = name; },
+    onDelete: () => { data.people = data.people.filter(x => x !== p); state.personId = state.groupId = null; } });
+}
+function addGroup(p){
+  nameSheet({ title: 'Новый подсписок', label: `Подсписок для: ${p.name}`, placeholder: 'Например, Встречи',
+    onSave: name => p.groups.push({ id: uid(), name, tasks: [] }) });
+}
+function editGroup(p, g){
+  nameSheet({ title: 'Подсписок', label: 'Название', placeholder: 'Название', value: g.name,
+    onSave: name => { g.name = name; },
+    onDelete: () => { p.groups = p.groups.filter(x => x !== g); state.groupId = null; } });
+}
+
+function taskSheet({existing, personId, groupId, date}){
+  const t = existing ? existing.t : null;
+  const pid = existing ? existing.p.id : (personId || (data.people[0] && data.people[0].id) || '');
+  const gid = existing ? existing.g.id : groupId;
+  const personOpts = data.people.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  openSheet({
+    title: t ? (t.archived ? 'Дело в архиве' : 'Дело') : 'Новое дело',
+    extra: t ? (t.archived
+      ? { text: '↩︎ Вернуть из архива', onClick: () => { t.archived = false; delete t.archivedAt; } }
+      : { text: '📦 Отправить в архив', onClick: () => { t.archived = true; t.archivedAt = Date.now(); } }) : null,
+    body: `
+      <label class="field"><span>Что нужно сделать</span><textarea name="title" maxlength="500" rows="2" placeholder="Например, созвон по договору">${esc(t ? t.title : '')}</textarea></label>
+      <div class="two">
+        <label class="field"><span>Чьё дело</span><select name="person" id="fPerson">${personOpts}<option value="__new">+ Новый человек…</option></select></label>
+        <label class="field"><span>Подсписок</span><select name="group" id="fGroup"></select></label>
+      </div>
+      <label class="field hidden" id="fNewPersonWrap"><span>Имя нового человека</span><input name="newPerson" maxlength="80" placeholder="Например, Иван Иванов"></label>
+      <label class="field hidden" id="fNewGroupWrap"><span>Название нового подсписка</span><input name="newGroup" maxlength="80" placeholder="Например, Звонки"></label>
+      <div class="two">
+        <label class="field"><span>Дата</span><input type="date" name="date" value="${esc(t ? t.date : (date || todayISO()))}"></label>
+        <div>
+          <label class="field" style="margin-bottom:6px"><span>Дедлайн</span><input type="date" name="deadline" id="fDeadline" value="${esc(t ? (t.deadline || '') : '')}"></label>
+          <input type="hidden" name="sameDay" id="fSameDay" value="${t && t.deadline && t.deadline === t.date ? '1' : ''}">
+          <button type="button" class="chip" id="fSameBtn"><span class="box">✓</span>Совпадает с датой дела</button>
+        </div>
+      </div>
+      <label class="field"><span>Заметка</span><textarea name="note" maxlength="2000" rows="2" placeholder="Необязательно">${esc(t ? (t.note || '') : '')}</textarea></label>`,
+    onMount: () => {
+      const ps = $('#fPerson'), gs = $('#fGroup');
+      const fillGroups = (selected) => {
+        const p = person(ps.value);
+        const groups = p ? p.groups : [];
+        gs.innerHTML = groups.map(g => `<option value="${g.id}" ${g.id === selected ? 'selected' : ''}>${esc(g.name)}</option>`).join('') + `<option value="__new" ${!groups.length ? 'selected' : ''}>+ Новый подсписок…</option>`;
+        $('#fNewPersonWrap').classList.toggle('hidden', ps.value !== '__new');
+        $('#fNewGroupWrap').classList.toggle('hidden', gs.value !== '__new');
+      };
+      if (!data.people.length) ps.value = '__new';
+      ps.onchange = () => fillGroups();
+      gs.onchange = () => $('#fNewGroupWrap').classList.toggle('hidden', gs.value !== '__new');
+      fillGroups(gid);
+      const dateIn = sheet.querySelector('[name=date]'), dlIn = $('#fDeadline'), same = $('#fSameDay'), sameBtn = $('#fSameBtn');
+      const syncSame = () => {
+        const on = same.value === '1';
+        sameBtn.classList.toggle('on', on);
+        dlIn.disabled = on;
+        if (on) dlIn.value = dateIn.value;
+      };
+      sameBtn.onclick = () => { same.value = same.value === '1' ? '' : '1'; haptic(); syncSame(); };
+      dateIn.addEventListener('input', syncSame);
+      dateIn.addEventListener('change', syncSame);
+      syncSame();
+    },
+    onSubmit: fd => {
+      const title = fd.title.trim();
+      if (!title) return 'Опишите дело';
+      if (!fd.date) return 'Укажите дату';
+      if (fd.sameDay !== '1' && fd.deadline && fd.deadline < fd.date) return 'Дедлайн раньше даты дела — проверьте даты';
+      let p;
+      if (fd.person === '__new'){
+        const n = (fd.newPerson || '').trim(); if (!n) return 'Введите имя нового человека';
+        p = { id: uid(), name: n, groups: [] }; data.people.push(p);
+      } else p = person(fd.person);
+      let g;
+      if (fd.group === '__new' || !group(p, fd.group)){
+        const n = (fd.newGroup || '').trim(); if (!n) return 'Введите название подсписка';
+        g = { id: uid(), name: n, tasks: [] }; p.groups.push(g);
+      } else g = group(p, fd.group);
+      const fields = { title, date: fd.date, deadline: fd.sameDay === '1' ? fd.date : (fd.deadline || ''), note: (fd.note || '').trim() };
+      if (t){
+        Object.assign(t, fields);
+        if (existing.g !== g){ existing.g.tasks = existing.g.tasks.filter(x => x !== t); g.tasks.push(t); }
+      } else {
+        g.tasks.push({ id: uid(), done: false, created: Date.now(), ...fields });
+      }
+    },
+    onDelete: t ? () => { existing.g.tasks = existing.g.tasks.filter(x => x !== t); } : null
+  });
+}
+
+/* ===================== Events ===================== */
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('.tabs button');
+  if (tabBtn){ state.tab = tabBtn.dataset.tab; haptic(); render(); window.scrollTo(0, 0); return; }
+  const el = e.target.closest('[data-act]');
+  if (!el || !$('#app').contains(el)) return;
+  const id = el.dataset.id, act = el.dataset.act;
+  const p = person(state.personId), g = group(p, state.groupId);
+  switch (act){
+    case 'open-person': state.personId = id; state.groupId = null; haptic(); render(); window.scrollTo(0,0); break;
+    case 'open-group': state.groupId = id; state.showArchive = false; haptic(); render(); window.scrollTo(0,0); break;
+    case 'back': goBack(); break;
+    case 'person-menu': p && editPerson(p); break;
+    case 'group-menu': p && g && editGroup(p, g); break;
+    case 'toggle-task': { const x = findTask(id); if (x){ x.t.done = !x.t.done; haptic(x.t.done ? 'medium' : 'light'); commit(); } break; }
+    case 'edit-task': { const x = findTask(id); if (x) taskSheet({ existing: x }); break; }
+    case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
+    case 'cal-next': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1); render(); break;
+    case 'toggle-archive': state.showArchive = !state.showArchive; haptic(); render(); break;
+    case 'archive-done': if (g){ const now = Date.now(); g.tasks.forEach(t => { if (t.done && !t.archived){ t.archived = true; t.archivedAt = now; } }); haptic('medium'); commit(); } break;
+    case 'cal-day': state.selDay = id; haptic(); render(); break;
+  }
+});
+
+$('#fab').onclick = () => {
+  haptic();
+  if (state.tab === 'calendar') return taskSheet({ date: state.selDay });
+  const p = person(state.personId), g = group(p, state.groupId);
+  if (g) taskSheet({ personId: p.id, groupId: g.id });
+  else if (p) addGroup(p);
+  else addPerson();
+};
+
+/* ===================== Start ===================== */
+(async () => {
+  render();
+  const loaded = await Store.load();
+  if (loaded && Array.isArray(loaded.people)) data = loaded;
+  render();
+})();
+</script>
+</body>
+</html>
