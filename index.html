@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Чужие дела</title>
+<title>Задачи</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
@@ -265,7 +265,7 @@ function header(title, sub, menuAct){
 }
 
 function renderPeople(){
-  let h = header('Чужие дела', data.people.length ? plural(data.people.length, 'человек', 'человека', 'человек') : '');
+  let h = header('Задачи', data.people.length ? plural(data.people.length, 'человек', 'человека', 'человек') : '');
   if (!data.people.length){
     return h + `<div class="empty"><div class="big">👥</div>Добавьте человека, чьи дела вы ведёте — например, <b>Руководитель</b> или <b>Иван Иванов</b>.<br>Внутри можно создать подсписки: «Встречи», «Звонки», «Поручения»…<br><br>Нажмите <b>+</b> внизу.</div>`;
   }
