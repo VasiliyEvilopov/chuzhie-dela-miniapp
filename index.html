@@ -124,9 +124,13 @@
   .field input:disabled{opacity:.55}
   .hidden{display:none!important}
   .err{color:var(--danger);font-size:13px;margin:-4px 0 10px 2px}
+  .save-status{max-width:640px;margin:0 auto;padding:8px 16px;font-size:13px;color:var(--hint)}
+  .save-status.error{color:var(--danger)}
+  .save-status button{color:var(--accent);text-decoration:underline;margin-left:8px}
 </style>
 </head>
 <body>
+<div id="saveStatus" class="save-status" role="status" aria-live="polite">Загрузка сохранённых дел…</div>
 <div id="app"></div>
 <button class="fab" id="fab" aria-label="Добавить">+</button>
 <nav class="tabs">
@@ -139,7 +143,8 @@
 <script>
 /* ===================== Telegram ===================== */
 const tg = window.Telegram && window.Telegram.WebApp;
-const inTg = !!(tg && tg.initData);
+// Keyboard launches may have empty initData despite a working Telegram bridge.
+const inTg = !!(tg && (tg.initData || (tg.platform && tg.platform !== 'unknown')));
 const ver = v => inTg && tg.isVersionAtLeast && tg.isVersionAtLeast(v);
 if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
 if (ver('6.1')) { try { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch(e){} }
@@ -149,46 +154,119 @@ const useTgBack = ver('6.1') && tg.BackButton;
 /* ===================== Storage ===================== */
 const LS_KEY = 'foreign-tasks-v1';
 const CHUNK = 4000; // CloudStorage: max 4096 chars per value
+const CLOUD_META = 'tasks-meta-v2';
+const validData = d => d && Array.isArray(d.people) && d.people.every(p =>
+  p && typeof p.id === 'string' && typeof p.name === 'string' && Array.isArray(p.groups) && p.groups.every(g =>
+    g && typeof g.id === 'string' && typeof g.name === 'string' && Array.isArray(g.tasks)));
+const revision = d => Number(d && d.savedAt) || 0;
+function saveStatus(message, error = false){
+  const el = document.getElementById('saveStatus');
+  el.textContent = message;
+  el.classList.toggle('error', error);
+  if (error){
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.textContent = 'Повторить';
+    retry.onclick = () => window.location.reload();
+    el.appendChild(retry);
+  }
+}
 const Store = {
   cloud: ver('6.9') && !!tg.CloudStorage,
-  prevChunks: 0,
+  cloudReady: false,
+  slot: 'b',
+  loadFailed: false,
+  localSave(d){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(d)); return true; }
+    catch(e){ console.warn('local save', e); return false; }
+  },
   cs(method, ...args){
-    return new Promise((res, rej) => tg.CloudStorage[method](...args, (err, val) => err ? rej(err) : res(val)));
+    return new Promise((res, rej) => {
+      const timer = setTimeout(() => rej(new Error('Telegram storage timeout')), 8000);
+      try{
+        tg.CloudStorage[method](...args, (err, val) => {
+          clearTimeout(timer);
+          if (err || (method === 'setItem' && val !== true)) rej(new Error(err || 'Telegram did not save data'));
+          else res(val);
+        });
+      }catch(e){ clearTimeout(timer); rej(e); }
+    });
+  },
+  async readCloud(){
+    const manifest = await this.cs('getItem', CLOUD_META);
+    let keys;
+    if (manifest){
+      const m = JSON.parse(manifest);
+      if (!['a', 'b'].includes(m.slot) || !Number.isInteger(m.count) || m.count < 1 || m.count > 500) throw new Error('Invalid storage manifest');
+      this.slot = m.slot;
+      keys = Array.from({length:m.count}, (_, i) => 'tasks-' + m.slot + '-' + i);
+    } else {
+      const meta = await this.cs('getItem', 'meta');
+      if (!meta) return null;
+      const n = Number(meta);
+      if (!Number.isInteger(n) || n < 1 || n > 1023) throw new Error('Invalid legacy storage');
+      keys = Array.from({length:n}, (_, i) => 'd' + i);
+    }
+    const vals = await this.cs('getItems', keys);
+    if (keys.some(k => typeof vals[k] !== 'string' || !vals[k])) throw new Error('Incomplete saved data');
+    const loaded = JSON.parse(keys.map(k => vals[k]).join(''));
+    if (!validData(loaded)) throw new Error('Invalid saved data');
+    return loaded;
   },
   async load(){
+    let local = null, remote = null;
+    try{
+      const s = localStorage.getItem(LS_KEY);
+      if (s){ local = JSON.parse(s); if (!validData(local)) throw new Error('Invalid local data'); }
+    }catch(e){ local = null; this.loadFailed = true; console.warn('local load', e); }
     if (this.cloud){
       try{
-        const meta = await this.cs('getItem', 'meta');
-        if (meta){
-          const n = +meta, keys = Array.from({length:n}, (_,i) => 'd'+i);
-          const vals = await this.cs('getItems', keys);
-          this.prevChunks = n;
-          return JSON.parse(keys.map(k => vals[k] || '').join(''));
-        }
-      }catch(e){ console.warn('cloud load', e); }
+        remote = await this.readCloud();
+        this.cloudReady = true;
+      }catch(e){ this.loadFailed = true; console.warn('cloud load', e); }
     }
-    try{ const s = localStorage.getItem(LS_KEY); if (s) return JSON.parse(s); }catch(e){}
-    return null;
+    const loaded = remote && (!local || revision(remote) >= revision(local)) ? remote : local;
+    if (loaded) this.localSave(loaded);
+    return loaded;
   },
   async save(d){
-    const s = JSON.stringify(d);
-    try{ localStorage.setItem(LS_KEY, s); }catch(e){}
     if (!this.cloud) return;
+    if (!this.cloudReady) throw new Error('Cloud was not loaded; reload to retry');
+    const s = JSON.stringify(d);
     const chunks = [];
     for (let i = 0; i < s.length; i += CHUNK) chunks.push(s.slice(i, i + CHUNK));
-    for (let i = 0; i < chunks.length; i++) await this.cs('setItem', 'd'+i, chunks[i]);
-    await this.cs('setItem', 'meta', String(chunks.length));
-    if (this.prevChunks > chunks.length){
-      const extra = []; for (let i = chunks.length; i < this.prevChunks; i++) extra.push('d'+i);
-      await this.cs('removeItems', extra);
-    }
-    this.prevChunks = chunks.length;
+    if (chunks.length > 500) throw new Error('Cloud storage is full');
+    // Publish the pointer only after all chunks are safely written.
+    const slot = this.slot === 'a' ? 'b' : 'a';
+    for (let i = 0; i < chunks.length; i++) await this.cs('setItem', 'tasks-' + slot + '-' + i, chunks[i]);
+    await this.cs('setItem', CLOUD_META, JSON.stringify({slot, count:chunks.length}));
+    this.slot = slot;
   }
 };
-let saveTimer, saveChain = Promise.resolve();
-function flushSave(){ clearTimeout(saveTimer); saveChain = saveChain.then(() => Store.save(data)).catch(e => console.warn('save', e)); }
-function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 400); }
+let initialized = false, localSaved = false, saveChain = Promise.resolve();
+function flushSave(){
+  if (!initialized) return saveChain;
+  // Persist synchronously, before the WebView can close or suspend.
+  localSaved = Store.localSave(data);
+  const snapshot = JSON.parse(JSON.stringify(data));
+  saveStatus(Store.cloud ? 'Сохраняем в Telegram…' : (localSaved ? 'Сохранено на устройстве' : 'Не удалось сохранить дела'), !Store.cloud && !localSaved);
+  if (!Store.cloud) return saveChain;
+  try{ ver('6.2') && tg.enableClosingConfirmation(); }catch(e){}
+  saveChain = saveChain.then(() => Store.save(snapshot)).then(() => {
+    if (revision(snapshot) !== revision(data)) return;
+    saveStatus('Сохранено в Telegram');
+    try{ ver('6.2') && tg.disableClosingConfirmation(); }catch(e){}
+  }).catch(e => {
+    console.warn('save', e);
+    saveStatus(localSaved ? 'Сохранено на устройстве. Не удалось синхронизировать с Telegram.' : 'Не удалось сохранить дела. Не закрывайте приложение.', true);
+  });
+  return saveChain;
+}
+function scheduleSave(){ data.savedAt = Math.max(Date.now(), revision(data) + 1); return flushSave(); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+window.addEventListener('pagehide', () => { if (initialized) Store.localSave(data); });
+document.addEventListener('click', e => {
+  if (!initialized && e.target.closest('#app, #fab, .tabs, #sheet')){ e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
 
 /* ===================== Helpers ===================== */
 const $ = s => document.querySelector(s);
@@ -225,7 +303,7 @@ function allTasks(withArchived = false){
 }
 const findTask = id => allTasks(true).find(x => x.t.id === id);
 const liveTasks = g => g.tasks.filter(t => !t.archived);
-function commit(){ render(); scheduleSave(); }
+function commit(){ scheduleSave(); render(); }
 
 function sortTasks(list){
   const key = x => x.t.deadline || x.t.date || '9999';
@@ -566,10 +644,19 @@ $('#fab').onclick = () => {
 
 /* ===================== Start ===================== */
 (async () => {
-  render();
+  $('#fab').disabled = true;
   const loaded = await Store.load();
-  if (loaded && Array.isArray(loaded.people)) data = loaded;
+  if (loaded) data = loaded;
+  if (!loaded && Store.loadFailed){
+    saveStatus('Не удалось загрузить сохранённые дела. Повторите загрузку.', true);
+    return;
+  }
+  initialized = true;
+  $('#fab').disabled = false;
   render();
+  if (Store.loadFailed) saveStatus('Загружена копия с устройства. Синхронизация с Telegram недоступна.', true);
+  else if (loaded && Store.cloud) flushSave();
+  else saveStatus(loaded ? 'Сохранено на устройстве' : '');
 })();
 </script>
 </body>
