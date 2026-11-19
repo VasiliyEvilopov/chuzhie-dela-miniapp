@@ -510,13 +510,15 @@ function taskSheet({existing, personId, groupId, date}){
       let p;
       if (fd.person === '__new'){
         const n = (fd.newPerson || '').trim(); if (!n) return 'Введите имя нового человека';
-        p = { id: uid(), name: n, groups: [] }; data.people.push(p);
+        p = { id: uid(), name: n, groups: [] };
       } else p = person(fd.person);
+      if (!p) return 'Выберите человека';
       let g;
       if (fd.group === '__new' || !group(p, fd.group)){
         const n = (fd.newGroup || '').trim(); if (!n) return 'Введите название подсписка';
         g = { id: uid(), name: n, tasks: [] }; p.groups.push(g);
       } else g = group(p, fd.group);
+      if (fd.person === '__new') data.people.push(p);
       const fields = { title, date: fd.date, deadline: fd.sameDay === '1' ? fd.date : (fd.deadline || ''), note: (fd.note || '').trim() };
       if (t){
         Object.assign(t, fields);
